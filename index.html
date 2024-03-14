@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Niputin</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://unpkg.com/pdf-lib"></script>
+    <style>
+        body,
+        h1 {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+            font-size: 18px;
+            line-height: 1.15;
+            width: 100%;
+            max-width: 40em;
+            height: 60em;
+            max-height: 141vw;
+            margin: 0 auto;
+        }
+
+        .fileInput,
+        .info {
+            border: 1px solid gray;
+            border-radius: 0.3em;
+            padding: 0.3em;
+            margin-bottom: 0.3em;
+        }
+
+        #pdfPreview {
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
+        }
+
+        footer {
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Niputin kokoaa pöytäkirjan ja liitteet yhdeksi PDF-tiedostoksi</h1>
+    <p>
+        Kokoa valmiiksi PDF-muodossa oleva pöytäkirja tai muu päädokumentti ja joukko numeroituja liitteitä yhdeksi
+        PDF-tiedostoksi. Liitteisiin lisätään automaattisesti oikeaan yläkulmaan vesileima "Liite N". Liitteiden
+        valinnan jälkeen kooste-PDF tulee näkyviin esikatseluun, josta voit tallentaa sen. Tiedostoja ei missään
+        vaiheessa siirretä pois koneeltasi, vaan kokoaminen tehdään paikallisesti suoraan selaimessasi.
+    </p>
+    <div class="fileInput">
+        <label for="minutesFileInput">Pöytäkirja</label>
+        <input type="file" accept=".pdf" id="minutesFileInput" placeholder="Testi!" />
+    </div>
+    <div class="fileInput">
+        <label for="attachmentFilesInput">Liitteet</label>
+        <input type="file" accept=".pdf" id="attachmentFilesInput" multiple />
+        <div><small>Liitteiden järjestys määräytyy sen mukaan missä järjestyksessä ne näkyvät valintadialogin
+                tiedostolistassa.</small></div>
+    </div>
+    <iframe id="pdfPreview"
+        src="data:text/html,%3Ch1%20style%3D%22text-align%3A%20center%22%3EEsikatselu%3C%2Fh1%3E"></iframe>
+        <footer>
+            <a href="https://github.com/terotil/niputin">GitHub-projekti</a> |
+            <a href="https://www.gnu.org/licenses/gpl-3.0-standalone.html">Lisenssi GPLv3</a>
+        </footer>
+</body>
+
+<script>
+    let minutesFile = null;
+
+    function readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            var reader = new FileReader();
+            reader.onload = event => resolve(event.target.result);
+            reader.onerror = error => reject(error);
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    document.getElementById('minutesFileInput').addEventListener('change', async function (event) {
+        minutesFile = event.target.files[0];
+    });
+
+    document.getElementById('attachmentFilesInput').addEventListener('change', async function (event) {
+        const targetDoc = await PDFLib.PDFDocument.create();
+        const HelveticaBold = await targetDoc.embedFont(PDFLib.StandardFonts.HelveticaBold)
+
+        const minutesArrayBuffer = await readFileAsArrayBuffer(minutesFile);
+        const minutesSourceDoc = await PDFLib.PDFDocument.load(minutesArrayBuffer);
+        const minutesPages = await targetDoc.copyPages(minutesSourceDoc, minutesSourceDoc.getPageIndices());
+        for (const page of minutesPages) {
+            targetDoc.addPage(page);
+        }
+
+        for (const [attachmentNumber, attachmentFile] of Array.from(event.target.files).entries()) {
+            const arrayBuffer = await readFileAsArrayBuffer(attachmentFile);
+            const sourceDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+            const attachmentPages = await targetDoc.copyPages(sourceDoc, sourceDoc.getPageIndices());
+            for (const attachmentPage of attachmentPages) {
+                const { width, height } = attachmentPage.getSize();
+                attachmentPage.moveTo(width - 70, height - 35);
+                attachmentPage.drawText(`Liite ${attachmentNumber + 1}`, { size: 18, color: PDFLib.rgb(0, 0, 0), opacity: 0.5, font: HelveticaBold });
+                targetDoc.addPage(attachmentPage);
+            }
+        }
+
+        const pdfDataUri = await targetDoc.saveAsBase64({ dataUri: true });
+        document.getElementById('pdfPreview').src = pdfDataUri;
+    });
+</script>
+
+</html>
